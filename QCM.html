@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contrôle de Lecture : L'Adversaire</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #e74c3c; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 20px; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 600px; }
+        h1 { color: var(--primary); text-align: center; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+        .hidden { display: none; }
+        .timer { font-size: 1.2rem; font-weight: bold; color: var(--accent); text-align: right; margin-bottom: 10px; }
+        .options { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+        button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; transition: 0.3s; font-size: 1rem; }
+        .btn-main { background: var(--primary); color: white; width: 100%; }
+        .btn-option { background: #ecf0f1; text-align: left; }
+        .btn-option:hover { background: #dcdde1; }
+        input[type="text"] { width: 100%; padding: 10px; margin: 10px 0 20px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .correct { color: green; font-weight: bold; }
+        .wrong { color: red; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>L'Adversaire - E. Carrère</h1>
+
+    <form name="resultats-quizz" method="POST" data-netlify="true" id="netlify-form" class="hidden">
+        <input type="hidden" name="form-name" value="resultats-quizz">
+        <input type="text" name="nom_eleve" id="form-nom">
+        <input type="text" name="prenom_eleve" id="form-prenom">
+        <input type="text" name="note" id="form-note">
+        <textarea name="details_reponses" id="form-details"></textarea>
+    </form>
+
+    <div id="login-screen">
+        <p>Contrôle de lecture - Classe de Seconde</p>
+        <label>Nom :</label>
+        <input type="text" id="nom" placeholder="Ex: DUPONT" required>
+        <label>Prénom :</label>
+        <input type="text" id="prenom" placeholder="Ex: Jean" required>
+        <button class="btn-main" onclick="startQuiz()">Commencer le test</button>
+    </div>
+
+    <div id="quiz-screen" class="hidden">
+        <div class="timer">Temps : <span id="time">20</span>s</div>
+        <div id="question-container">
+            <h3 id="question-text"></h3>
+            <div id="options-container" class="options"></div>
+        </div>
+        <p style="margin-top: 20px;">Question <span id="q-idx">1</span>/10</p>
+    </div>
+
+    <div id="result-screen" class="hidden">
+        <h2>Merci !</h2>
+        <p id="user-info"></p>
+        <div id="score-display" style="font-size: 2rem; text-align: center; margin: 20px 0;"></div>
+        <p id="status-msg">Envoi de la note en cours...</p>
+        <div id="results-details"></div>
+    </div>
+</div>
+
+<script>
+    const questions = [
+        { q: "Quel est le nom du protagoniste principal ?", a: ["Jean-Claude Romand", "Emmanuel Carrère", "Luc Ladmiral"], c: 0 },
+        { q: "Quel mensonge est au cœur de la vie du protagoniste ?", a: ["Il prétend être écrivain", "Il prétend être médecin à l'OMS", "Il prétend être agent secret"], c: 1 },
+        { q: "Pendant combien d'années a-t-il menti à ses proches ?", a: ["5 ans", "12 ans", "18 ans"], c: 2 },
+        { q: "Où passait-il ses journées au lieu de travailler ?", a: ["Dans des parkings ou des forêts", "À la bibliothèque", "Chez une maîtresse"], c: 0 },
+        { q: "Quel événement déclenche le passage à l'acte meurtrier ?", a: ["Une plainte", "La découverte de ses dettes", "Une promotion refusée"], c: 1 },
+        { q: "Comment Carrère entre-t-il en contact avec lui ?", a: ["Par interview", "Par lettre en prison", "C'est son voisin"], c: 1 },
+        { q: "Quel est le sort de la famille du protagoniste ?", a: ["Ils ont survécu", "Il les a tous assassinés", "Seule sa femme est morte"], c: 1 },
+        { q: "Quel sentiment Carrère explore-t-il principalement ?", a: ["La haine", "Le vide et la solitude", "L'ambition"], c: 1 },
+        { q: "Le titre 'L'Adversaire' fait référence à :", a: ["Son ami Luc", "Satan / Le mal", "Le procureur"], c: 1 },
+        { q: "Comment se termine le livre pour Romand ?", a: ["Condamné à perpétuité", "Suicide en prison", "Acquitté"], c: 0 }
+    ];
+
+    let currentQ = 0, score = 0, timer, userAnswers = [], timeLeft = 20;
+
+    function startQuiz() {
+        if(!document.getElementById('nom').value || !document.getElementById('prenom').value) return alert("Nom et prénom requis");
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('quiz-screen').classList.remove('hidden');
+        showQuestion();
+    }
+
+    function showQuestion() {
+        clearInterval(timer);
+        if(currentQ >= questions.length) return finishQuiz();
+        timeLeft = 20;
+        document.getElementById('time').innerText = timeLeft;
+        document.getElementById('q-idx').innerText = currentQ + 1;
+        document.getElementById('question-text').innerText = questions[currentQ].q;
+        const optContainer = document.getElementById('options-container');
+        optContainer.innerHTML = '';
+        questions[currentQ].a.forEach((opt, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'btn-option';
+            btn.innerText = opt;
+            btn.onclick = () => selectOption(i);
+            optContainer.appendChild(btn);
+        });
+        timer = setInterval(() => {
+            timeLeft--;
+            document.getElementById('time').innerText = timeLeft;
+            if(timeLeft <= 0) selectOption(-1);
+        }, 1000);
+    }
+
+    function selectOption(idx) {
+        clearInterval(timer);
+        if(idx === questions[currentQ].c) score++;
+        userAnswers.push({ q: questions[currentQ].q, selected: idx, correct: questions[currentQ].c });
+        currentQ++;
+        showQuestion();
+    }
+
+    function finishQuiz() {
+        document.getElementById('quiz-screen').classList.add('hidden');
+        document.getElementById('result-screen').classList.remove('hidden');
+        
+        const nom = document.getElementById('nom').value;
+        const prenom = document.getElementById('prenom').value;
+        const noteFinale = `${score}/10`;
+
+        // Remplir le formulaire caché
+        document.getElementById('form-nom').value = nom;
+        document.getElementById('form-prenom').value = prenom;
+        document.getElementById('form-note').value = noteFinale;
+        document.getElementById('form-details').value = JSON.stringify(userAnswers);
+
+        // Envoyer à Netlify via AJAX
+        const myForm = document.getElementById('netlify-form');
+        const formData = new FormData(myForm);
+        
+        fetch("/", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams(formData).toString(),
+        })
+        .then(() => {
+            document.getElementById('status-msg').innerText = "Note enregistrée avec succès.";
+        })
+        .catch((error) => alert(error));
+
+        document.getElementById('score-display').innerHTML = `Note : ${noteFinale}`;
+    }
+</script>
+
+</body>
+</html>
